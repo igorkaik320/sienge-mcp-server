@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: sienge-api-server
+    env: docker
+    plan: free
+    envVars:
+      - key: SIENGE_SUBDOMAIN
+        sync: false
+      - key: SIENGE_USERNAME
+        sync: false
+      - key: SIENGE_PASSWORD
+        sync: false

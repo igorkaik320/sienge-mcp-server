@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "sienge": {
+      "command": "C:\\Users\\USER\\Documents\\projet\\venv\\Scripts\\python.exe",
+      "args": [
+        "-m",
+        "sienge_mcp.server"
+      ],
+      "env": {
+        "SIENGE_SUBDOMAIN": "cctcontrol",
+        "SIENGE_USERNAME": "cctcontrol-api",
+        "SIENGE_PASSWORD": "QnMXmZbF24LWZujTrOJo6GVgAg3EPxeU"
+      }
+    }
+  }
+}

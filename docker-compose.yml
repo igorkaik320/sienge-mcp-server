@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  sienge-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - SIENGE_SUBDOMAIN=${SIENGE_SUBDOMAIN}
+      - SIENGE_USERNAME=${SIENGE_USERNAME}
+      - SIENGE_PASSWORD=${SIENGE_PASSWORD}
+    restart: unless-stopped

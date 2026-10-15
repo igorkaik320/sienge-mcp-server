@@ -1,0 +1,58 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Other projects
+blaze-api/
+boleto-bot-sienge/
+chatwoot/
+civil-zenith-data/
+constru-ai-connect/
+constru-ai-connect-comercial/
+construction-insights/
+construction-insights-backend/
+dash3s/
+dentalflow-pro/
+projetbase/
+siengeassisten/
+storyteller-ai/
+tradebot-sandbox/
+woofed-crm/
+assistente-ia-cob/

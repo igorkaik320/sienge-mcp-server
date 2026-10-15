@@ -1,0 +1,24 @@
+[project]
+name = "sienge-mcp-server"
+version = "0.1.0"
+description = "MCP Server for Sienge API integration"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp<2.0.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sienge_mcp"]
+
+[project.scripts]
+sienge-mcp = "sienge_mcp.server:main"
+sienge-api = "sienge_mcp.api_server:main"
