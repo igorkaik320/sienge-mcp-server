@@ -17,5 +17,5 @@ COPY sienge_mcp/ ./sienge_mcp/
 # Expose port
 EXPOSE 8000
 
-# Run the application
-CMD ["uvicorn", "sienge_mcp.api_server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the MCP HTTP Server
+CMD ["python", "-m", "sienge_mcp.mcp_http_server"]

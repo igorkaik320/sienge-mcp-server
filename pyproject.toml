@@ -10,6 +10,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
+    "sse-starlette>=2.0.0",
+    "python-multipart>=0.0.9",
 ]
 
 [build-system]
@@ -22,3 +24,4 @@ packages = ["sienge_mcp"]
 [project.scripts]
 sienge-mcp = "sienge_mcp.server:main"
 sienge-api = "sienge_mcp.api_server:main"
+sienge-mcp-http = "sienge_mcp.mcp_http_server:app"
