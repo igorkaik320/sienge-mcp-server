@@ -39,6 +39,9 @@ logger = logging.getLogger("sienge_mcp")
 API_KEY = os.getenv("MCP_API_KEY", "your-secret-api-key-change-this")
 READ_ONLY = os.getenv("READ_ONLY", "false").lower() == "true"
 
+# Initialize Sienge client (lazy initialization)
+sienge_client = None
+
 
 # Tool storage
 class ToolStorage:
@@ -139,26 +142,26 @@ def is_write_operation(func_name: str) -> bool:
 
 
 # Register all tools
-def register_all_tools():
+def register_all_tools(client: SiengeClient):
     """Register all Sienge tools from all modules"""
     mock_mcp = MockMCP()
     
     # Register tools from each module
-    register_creditor_tools(mock_mcp, sienge_client)
-    register_company_tools(mock_mcp, sienge_client)
-    register_contract_tools(mock_mcp, sienge_client)
-    register_measurement_tools(mock_mcp, sienge_client)
-    register_enterprise_tools(mock_mcp, sienge_client)
-    register_bill_tools(mock_mcp, sienge_client)
-    register_accounts_receivable_tools(mock_mcp, sienge_client)
-    register_payment_categories_tools(mock_mcp, sienge_client)
-    register_checking_accounts_tools(mock_mcp, sienge_client)
-    register_cost_centers_tools(mock_mcp, sienge_client)
-    register_stock_inventories_tools(mock_mcp, sienge_client)
-    register_purchase_invoices_tools(mock_mcp, sienge_client)
-    register_purchase_quotations_tools(mock_mcp, sienge_client)
-    register_purchase_requests_tools(mock_mcp, sienge_client)
-    register_purchase_orders_tools(mock_mcp, sienge_client)
+    register_creditor_tools(mock_mcp, client)
+    register_company_tools(mock_mcp, client)
+    register_contract_tools(mock_mcp, client)
+    register_measurement_tools(mock_mcp, client)
+    register_enterprise_tools(mock_mcp, client)
+    register_bill_tools(mock_mcp, client)
+    register_accounts_receivable_tools(mock_mcp, client)
+    register_payment_categories_tools(mock_mcp, client)
+    register_checking_accounts_tools(mock_mcp, client)
+    register_cost_centers_tools(mock_mcp, client)
+    register_stock_inventories_tools(mock_mcp, client)
+    register_purchase_invoices_tools(mock_mcp, client)
+    register_purchase_quotations_tools(mock_mcp, client)
+    register_purchase_requests_tools(mock_mcp, client)
+    register_purchase_orders_tools(mock_mcp, client)
     
     # Extract tools from mock MCP
     for tool_name, func in mock_mcp.tools:
@@ -180,10 +183,25 @@ def register_all_tools():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan"""
+    global sienge_client
+    
     # Startup
     logger.info("Starting MCP HTTP Server")
-    register_all_tools()
-    logger.info(f"MCP HTTP Server ready with {len(tool_storage.tools)} tools")
+    
+    # Initialize Sienge client
+    try:
+        sienge_client = SiengeClient()
+        logger.info("Sienge client initialized successfully")
+    except ValueError as e:
+        logger.error(f"Failed to initialize Sienge client: {e}")
+        sienge_client = None
+    
+    # Register tools
+    if sienge_client:
+        register_all_tools(sienge_client)
+        logger.info(f"MCP HTTP Server ready with {len(tool_storage.tools)} tools")
+    else:
+        logger.warning("Sienge client not initialized, tools not registered")
     
     yield
     
@@ -191,6 +209,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down MCP HTTP Server")
     if sienge_client:
         sienge_client.close()
+        sienge_client = None
 
 
 # Initialize FastAPI with lifespan
