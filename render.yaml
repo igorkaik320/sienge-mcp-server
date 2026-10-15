@@ -1,8 +1,9 @@
 services:
   - type: web
-    name: sienge-api-server
+    name: sienge-mcp-server
     env: docker
     plan: free
+    healthCheckPath: /health
     envVars:
       - key: SIENGE_SUBDOMAIN
         sync: false
@@ -10,3 +11,8 @@ services:
         sync: false
       - key: SIENGE_PASSWORD
         sync: false
+      - key: MCP_API_KEY
+        sync: false
+      - key: READ_ONLY
+        sync: false
+        value: "false"

@@ -4,7 +4,11 @@ import json
 import logging
 import asyncio
 import inspect
+import hmac
+import time
+import functools
 from typing import Any, Dict, List, Optional, Callable
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -28,42 +32,12 @@ from .purchase_requests import register_purchase_requests_tools
 from .purchase_orders import register_purchase_orders_tools
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Initialize FastAPI
-app = FastAPI(
-    title="Sienge MCP HTTP Server",
-    description="MCP Server via HTTP for Sienge API integration",
-    version="1.0.0"
-)
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("sienge_mcp")
 
 # API Key for authentication
 API_KEY = os.getenv("MCP_API_KEY", "your-secret-api-key-change-this")
-
-# Initialize Sienge client
-try:
-    sienge_client = SiengeClient()
-    logger.info("Sienge client initialized successfully")
-except ValueError as e:
-    logger.error(f"Failed to initialize Sienge client: {e}")
-    sienge_client = None
-
-
-def verify_api_key(api_key: Optional[str] = Header(None), api_key_query: Optional[str] = None) -> None:
-    """Verify API key for authentication (accepts header or query parameter)"""
-    key = api_key or api_key_query
-    if key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+READ_ONLY = os.getenv("READ_ONLY", "false").lower() == "true"
 
 
 # Tool storage
@@ -72,13 +46,14 @@ class ToolStorage:
     def __init__(self):
         self.tools: Dict[str, Dict[str, Any]] = {}
     
-    def add_tool(self, name: str, func: Callable, description: str, parameters: Dict[str, Any]):
+    def add_tool(self, name: str, func: Callable, description: str, parameters: Dict[str, Any], is_write: bool = False):
         """Add a tool to storage"""
         self.tools[name] = {
             "name": name,
             "description": description,
             "inputSchema": parameters,
-            "function": func
+            "function": func,
+            "is_write": is_write
         }
     
     def get_tool(self, name: str) -> Optional[Dict[str, Any]]:
@@ -156,6 +131,13 @@ def extract_parameters(func: Callable) -> Dict[str, Any]:
     return parameters
 
 
+# Detect if function is a write operation
+def is_write_operation(func_name: str) -> bool:
+    """Detect if a function is a write operation based on name"""
+    write_prefixes = ['insert', 'update', 'delete', 'remove', 'authorize', 'disapprove', 'patch', 'put', 'post']
+    return any(func_name.startswith(prefix) for prefix in write_prefixes)
+
+
 # Register all tools
 def register_all_tools():
     """Register all Sienge tools from all modules"""
@@ -180,29 +162,79 @@ def register_all_tools():
     
     # Extract tools from mock MCP
     for tool_name, func in mock_mcp.tools:
+        is_write = is_write_operation(tool_name)
+        
+        # Skip write operations in READ_ONLY mode
+        if READ_ONLY and is_write:
+            logger.info(f"Skipping write tool in READ_ONLY mode: {tool_name}")
+            continue
+        
         description = func.__doc__ or f"Tool: {tool_name}"
         parameters = extract_parameters(func)
-        tool_storage.add_tool(tool_name, func, description, parameters)
+        tool_storage.add_tool(tool_name, func, description, parameters, is_write)
     
-    logger.info(f"Registered {len(tool_storage.tools)} tools")
+    logger.info(f"Registered {len(tool_storage.tools)} tools (READ_ONLY={READ_ONLY})")
 
 
-# Initialize tools on startup
-@app.on_event("startup")
-async def startup():
-    """Initialize tools on startup"""
+# Lifespan context manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan"""
+    # Startup
+    logger.info("Starting MCP HTTP Server")
     register_all_tools()
     logger.info(f"MCP HTTP Server ready with {len(tool_storage.tools)} tools")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down MCP HTTP Server")
+    if sienge_client:
+        sienge_client.close()
 
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "sienge_client": "connected" if sienge_client else "disconnected",
-        "tools_count": len(tool_storage.tools)
-    }
+# Initialize FastAPI with lifespan
+app = FastAPI(
+    title="Sienge MCP HTTP Server",
+    description="MCP Server via HTTP for Sienge API integration",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def verify_api_key(
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None),
+    api_key_query: Optional[str] = None
+) -> None:
+    """Verify API key for authentication (accepts Bearer header, X-API-Key header, or query parameter)"""
+    key = None
+    
+    # Try Authorization: Bearer <key>
+    if authorization and authorization.startswith("Bearer "):
+        key = authorization[7:]
+    # Try X-API-Key header
+    elif x_api_key:
+        key = x_api_key
+    # Try query parameter
+    elif api_key_query:
+        key = api_key_query
+    
+    if not key:
+        raise HTTPException(status_code=401, detail="API key required")
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not hmac.compare_digest(key.encode(), API_KEY.encode()):
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
 
 @app.get("/")
@@ -211,29 +243,51 @@ async def root():
     return {
         "name": "Sienge MCP HTTP Server",
         "version": "1.0.0",
+        "status": "healthy",
         "endpoints": {
             "health": "/health",
             "mcp": "/mcp",
             "sse": "/sse",
             "tools": "/tools"
         },
-        "tools_count": len(tool_storage.tools)
+        "tools_count": len(tool_storage.tools),
+        "read_only": READ_ONLY
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "sienge_client": "connected" if sienge_client else "disconnected",
+        "tools_count": len(tool_storage.tools),
+        "read_only": READ_ONLY
     }
 
 
 @app.get("/tools")
-async def list_tools_endpoint(x_api_key: Optional[str] = Header(None), api_key: Optional[str] = None):
+async def list_tools_endpoint(
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None),
+    api_key: Optional[str] = None
+):
     """List all available tools"""
-    verify_api_key(x_api_key, api_key)
+    verify_api_key(authorization, x_api_key, api_key)
     return {
         "tools": tool_storage.list_tools()
     }
 
 
 @app.post("/mcp")
-async def mcp_endpoint(request: Dict[str, Any], x_api_key: Optional[str] = Header(None), api_key: Optional[str] = None):
+async def mcp_endpoint(
+    request: Dict[str, Any],
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None),
+    api_key: Optional[str] = None
+):
     """Main MCP endpoint for JSON-RPC 2.0"""
-    verify_api_key(x_api_key, api_key)
+    verify_api_key(authorization, x_api_key, api_key)
     
     jsonrpc = request.get("jsonrpc", "2.0")
     request_id = request.get("id")
@@ -303,9 +357,26 @@ async def mcp_endpoint(request: Dict[str, Any], x_api_key: Optional[str] = Heade
                     }
                 }
             
-            # Call the tool function
+            # Check if write operation in READ_ONLY mode
+            if READ_ONLY and tool.get("is_write", False):
+                return {
+                    "jsonrpc": jsonrpc,
+                    "id": request_id,
+                    "error": {
+                        "code": -32603,
+                        "message": f"Tool {tool_name} is blocked in READ_ONLY mode"
+                    }
+                }
+            
+            # Log tool call
+            start = time.perf_counter()
             try:
                 result = tool["function"](**arguments)
+                duration_ms = (time.perf_counter() - start) * 1000
+                # Sanitize arguments for logging
+                safe_args = {k: "***" if any(x in k.lower() for x in ['password', 'senha', 'key']) else v for k, v in arguments.items()}
+                logger.info("tool=%s ok ms=%d args=%s", tool_name, duration_ms, safe_args)
+                
                 return {
                     "jsonrpc": jsonrpc,
                     "id": request_id,
@@ -319,7 +390,9 @@ async def mcp_endpoint(request: Dict[str, Any], x_api_key: Optional[str] = Heade
                     }
                 }
             except Exception as e:
-                logger.error(f"Error calling tool {tool_name}: {e}")
+                duration_ms = (time.perf_counter() - start) * 1000
+                safe_args = {k: "***" if any(x in k.lower() for x in ['password', 'senha', 'key']) else v for k, v in arguments.items()}
+                logger.exception("tool=%s error ms=%d args=%s", tool_name, duration_ms, safe_args)
                 return {
                     "jsonrpc": jsonrpc,
                     "id": request_id,
@@ -352,9 +425,14 @@ async def mcp_endpoint(request: Dict[str, Any], x_api_key: Optional[str] = Heade
 
 
 @app.get("/sse")
-async def sse_endpoint(request: Request, x_api_key: Optional[str] = Header(None), api_key: Optional[str] = None):
+async def sse_endpoint(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None),
+    api_key: Optional[str] = None
+):
     """SSE endpoint for streaming MCP messages"""
-    verify_api_key(x_api_key, api_key)
+    verify_api_key(authorization, x_api_key, api_key)
     
     async def event_generator():
         """Generate SSE events"""
@@ -386,8 +464,8 @@ async def sse_endpoint(request: Request, x_api_key: Optional[str] = Header(None)
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 10000))
     host = os.getenv("HOST", "0.0.0.0")
     
-    logger.info(f"Starting MCP HTTP Server on {host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    logger.info(f"Starting MCP HTTP Server on {host}:{port} (READ_ONLY={READ_ONLY})")
+    uvicorn.run(app, host=host, port=port, access_log=False)

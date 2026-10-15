@@ -9,8 +9,8 @@ def register_bill_tools(mcp: FastMCP, client: SiengeClient):
 
     @mcp.tool()
     def get_bills(
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         debtor_id: Optional[int] = None,
         creditor_id: Optional[int] = None,
         cost_center_id: Optional[int] = None,
@@ -20,31 +20,34 @@ def register_bill_tools(mcp: FastMCP, client: SiengeClient):
         origin_id: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
+        compact: bool = True,
     ) -> dict:
-        """Busca títulos no Sienge com filtros.
+        """Busca títulos a pagar (contas a pagar) no Sienge por data de emissão.
+
+        Use para DRE, fluxo de caixa e relatórios financeiros. Filtra por data de emissão.
 
         Args:
             start_date: Data inicial de emissão (formato: yyyy-MM-dd)
             end_date: Data final de emissão (formato: yyyy-MM-dd)
-            debtor_id: Código do devedor (opcional)
-            creditor_id: Código do credor (opcional)
+            debtor_id: Código do devedor/empresa (opcional)
+            creditor_id: Código do credor/fornecedor (opcional)
             cost_center_id: Código do centro de custo (opcional)
-            documents_identification_id: Identificação do documento (opcional)
+            documents_identification_id: Tipo de documento (opcional)
             document_number: Número do documento (opcional)
             status: Status do título (opcional)
             origin_id: ID da origem (opcional)
             limit: Quantidade máxima de resultados (default: 100, max: 200)
             offset: Deslocamento para paginação (default: 0)
+            compact: Remove campos verbose como links e tenantUrl (default: true)
 
         Returns:
-            Lista de títulos com metadados de paginação
+            Lista de títulos a pagar com metadados de paginação
         """
-        params = {
-            "startDate": start_date,
-            "endDate": end_date,
-            "limit": limit,
-            "offset": offset,
-        }
+        params = {}
+        if start_date:
+            params["startDate"] = start_date
+        if end_date:
+            params["endDate"] = end_date
         if debtor_id:
             params["debtorId"] = debtor_id
         if creditor_id:
@@ -59,8 +62,10 @@ def register_bill_tools(mcp: FastMCP, client: SiengeClient):
             params["status"] = status
         if origin_id:
             params["originId"] = origin_id
+        params["limit"] = limit
+        params["offset"] = offset
 
-        return client.get("/bills", params=params)
+        return client.get("/bills", params=params, compact=compact)
 
     @mcp.tool()
     def insert_bill(bill_data: dict) -> dict:
@@ -101,8 +106,8 @@ def register_bill_tools(mcp: FastMCP, client: SiengeClient):
 
     @mcp.tool()
     def get_bills_by_change_date(
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         debtor_id: Optional[int] = None,
         creditor_id: Optional[int] = None,
         cost_center_id: Optional[int] = None,
@@ -112,8 +117,9 @@ def register_bill_tools(mcp: FastMCP, client: SiengeClient):
         origin_id: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
+        compact: bool = True,
     ) -> dict:
-        """Busca títulos por data de alteração.
+        """Busca títulos por data de alteração (modificação).
 
         Args:
             start_date: Data inicial de alteração (formato: yyyy-MM-dd)
@@ -127,16 +133,16 @@ def register_bill_tools(mcp: FastMCP, client: SiengeClient):
             origin_id: ID da origem (opcional)
             limit: Quantidade máxima de resultados (default: 100, max: 200)
             offset: Deslocamento para paginação (default: 0)
+            compact: Remove campos verbose (default: true)
 
         Returns:
             Lista de títulos alterados no período
         """
-        params = {
-            "startDate": start_date,
-            "endDate": end_date,
-            "limit": limit,
-            "offset": offset,
-        }
+        params = {}
+        if start_date:
+            params["startDate"] = start_date
+        if end_date:
+            params["endDate"] = end_date
         if debtor_id:
             params["debtorId"] = debtor_id
         if creditor_id:
@@ -151,8 +157,10 @@ def register_bill_tools(mcp: FastMCP, client: SiengeClient):
             params["status"] = status
         if origin_id:
             params["originId"] = origin_id
+        params["limit"] = limit
+        params["offset"] = offset
 
-        return client.get("/bills/by-change-date", params=params)
+        return client.get("/bills/by-change-date", params=params, compact=compact)
 
     @mcp.tool()
     def insert_electronic_invoice_bill(invoice_data: dict) -> dict:
