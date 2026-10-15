@@ -59,9 +59,10 @@ except ValueError as e:
     sienge_client = None
 
 
-def verify_api_key(api_key: Optional[str] = Header(None)) -> None:
-    """Verify API key for authentication"""
-    if api_key != API_KEY:
+def verify_api_key(api_key: Optional[str] = Header(None), api_key_query: Optional[str] = None) -> None:
+    """Verify API key for authentication (accepts header or query parameter)"""
+    key = api_key or api_key_query
+    if key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
@@ -221,18 +222,18 @@ async def root():
 
 
 @app.get("/tools")
-async def list_tools_endpoint(x_api_key: Optional[str] = Header(None)):
+async def list_tools_endpoint(x_api_key: Optional[str] = Header(None), api_key: Optional[str] = None):
     """List all available tools"""
-    verify_api_key(x_api_key)
+    verify_api_key(x_api_key, api_key)
     return {
         "tools": tool_storage.list_tools()
     }
 
 
 @app.post("/mcp")
-async def mcp_endpoint(request: Dict[str, Any], x_api_key: Optional[str] = Header(None)):
+async def mcp_endpoint(request: Dict[str, Any], x_api_key: Optional[str] = Header(None), api_key: Optional[str] = None):
     """Main MCP endpoint for JSON-RPC 2.0"""
-    verify_api_key(x_api_key)
+    verify_api_key(x_api_key, api_key)
     
     jsonrpc = request.get("jsonrpc", "2.0")
     request_id = request.get("id")
@@ -351,9 +352,9 @@ async def mcp_endpoint(request: Dict[str, Any], x_api_key: Optional[str] = Heade
 
 
 @app.get("/sse")
-async def sse_endpoint(request: Request, x_api_key: Optional[str] = Header(None)):
+async def sse_endpoint(request: Request, x_api_key: Optional[str] = Header(None), api_key: Optional[str] = None):
     """SSE endpoint for streaming MCP messages"""
-    verify_api_key(x_api_key)
+    verify_api_key(x_api_key, api_key)
     
     async def event_generator():
         """Generate SSE events"""
